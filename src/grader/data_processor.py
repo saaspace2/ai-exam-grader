@@ -113,13 +113,29 @@ class DataProcessor:
         self._append("predictions", predictions)
 
     def _append(self, table: str, rows: list[dict]) -> None:
-        """Convert dicts to a Spark DataFrame and append to a Delta table."""
+        """Convert dicts to a Spark DataFrame and append to a Delta table.
+
+        We reuse the TARGET TABLE's schema so Spark never has to guess column
+        types from the data. Guessing fails when a column is all None (e.g. an
+        MCQ question has rubric=None), raising CANNOT_DETERMINE_TYPE. Using the
+        table's own schema avoids that entirely.
+        """
         if not rows:
             logger.info(f"No rows to write to {table}.")
             return
         base = self.config.base_path
         full = f"{base}.{table}"
-        sdf = self.spark.createDataFrame(rows)
+
+        # Read the existing table's schema (column names + types).
+        target_schema = self.spark.table(full).schema
+        cols = [f.name for f in target_schema]
+
+        # Align each row to the table's columns (fill missing keys with None,
+        # drop any extra keys), preserving column order.
+        aligned = [{c: row.get(c) for c in cols} for row in rows]
+
+        # Build the DataFrame WITH the table's schema so types are explicit.
+        sdf = self.spark.createDataFrame(aligned, schema=target_schema)
         sdf.write.format("delta").mode("append").saveAsTable(full)
         logger.info(f"Wrote {len(rows)} row(s) to {full}.")
 
