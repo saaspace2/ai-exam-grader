@@ -1,0 +1,42 @@
+# -----------------------------------------------------------------------------
+# GRADING JOB - the pipeline: read new answer images from the Volume, grade them
+# with the SAME grading engine, and write grades + predictions to Delta tables.
+# Can be scheduled or triggered.
+# -----------------------------------------------------------------------------
+resources:
+  jobs:
+    grading_job:
+      name: "[${bundle.target}] exam-grader batch grade"
+      tasks:
+        - task_key: batch_grade
+          notebook_task:
+            notebook_path: ../databricks_jobs/02_batch_grade.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          job_cluster_key: grading_cluster
+
+        - task_key: refresh_vector_index
+          # runs after grading, rebuilds the Clarify search index
+          depends_on:
+            - task_key: batch_grade
+          notebook_task:
+            notebook_path: ../databricks_jobs/03_refresh_vector_index.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          job_cluster_key: grading_cluster
+
+      job_clusters:
+        - job_cluster_key: grading_cluster
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: "Standard_DS3_v2"
+            num_workers: 1
+            data_security_mode: SINGLE_USER
+
+      # example schedule (paused in dev automatically): every hour
+      schedule:
+        quartz_cron_expression: "0 0 * * * ?"
+        timezone_id: "UTC"
+        pause_status: PAUSED

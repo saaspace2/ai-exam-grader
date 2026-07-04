@@ -1,0 +1,77 @@
+# =============================================================================
+# Databricks Asset Bundle for the AI Exam-Grading System.
+#
+# A "bundle" is ONE file (plus the resources/ it includes) that describes the
+# whole cloud deployment: which jobs exist, what code they run, and the settings
+# for each environment (dev / acc / prd). You deploy it with:
+#     databricks bundle deploy -t dev
+# and run a job with:
+#     databricks bundle run setup_job -t dev
+#
+# This mirrors the Marvel MLOps project's bundle style.
+# =============================================================================
+
+bundle:
+  name: ai-exam-grader
+
+# ---------------------------------------------------------------------------
+# Variables let us change one value per environment instead of editing jobs.
+# Each target (dev/acc/prd) overrides these below.
+# ---------------------------------------------------------------------------
+variables:
+  catalog:
+    description: Unity Catalog name for this environment.
+    default: exam_grader_dev
+  schema:
+    description: Schema (database) inside the catalog.
+    default: grading
+  notifications_email:
+    description: Where job-failure alerts go.
+    default: ""
+
+# ---------------------------------------------------------------------------
+# Include the job and resource definitions kept in resources/ (like Marvel).
+# Splitting them out keeps this file readable.
+# ---------------------------------------------------------------------------
+include:
+  - resources/*.yml
+
+# ---------------------------------------------------------------------------
+# Targets = environments. You pick one with -t dev|acc|prd. Each has its own
+# catalog, so dev work never touches production data.
+# ---------------------------------------------------------------------------
+targets:
+
+  dev:
+    # dev is the default you deploy to while building.
+    mode: development          # prefixes resources with your username, pauses schedules
+    default: true
+    workspace:
+      host: https://dbc-8481bc7c-79fc.cloud.databricks.com
+    variables:
+      catalog: exam_grader_dev
+      schema: grading
+
+  acc:
+    # acc = acceptance/staging. Tests run here before production.
+    mode: production
+    workspace:
+      host: https://dbc-8481bc7c-79fc.cloud.databricks.com
+      root_path: /Shared/.bundle/${bundle.name}/acc
+    variables:
+      catalog: exam_grader_acc
+      schema: grading
+    run_as:
+      service_principal_name: ${var.acc_service_principal}
+
+  prd:
+    # prd = production. Deploys are smoke-gated in CI/CD before reaching here.
+    mode: production
+    workspace:
+      host: https://dbc-8481bc7c-79fc.cloud.databricks.com
+      root_path: /Shared/.bundle/${bundle.name}/prd
+    variables:
+      catalog: exam_grader_prd
+      schema: grading
+    run_as:
+      service_principal_name: ${var.prd_service_principal}

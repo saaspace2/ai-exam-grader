@@ -1,0 +1,28 @@
+# Secrets - NEVER commit these
+.env
+.databrickscfg
+*.token
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Local data (regenerated at runtime)
+*.sqlite
+uploads/
+
+# Databricks
+.databricks/
+
+# OS / editor
+.DS_Store
+.vscode/settings.json
+.databricks/.databricks.env
+*.env
+!.env.example

@@ -1,0 +1,59 @@
+{
+  "questions": [
+    {
+      "id": "Q1",
+      "type": "mcq",
+      "text": "What is the capital of France?",
+      "correct_answer": "Paris",
+      "max_marks": 2
+    },
+    {
+      "id": "Q2",
+      "type": "numeric",
+      "text": "What is 7 x 8?",
+      "correct_answer": "56",
+      "tolerance": 0,
+      "max_marks": 2
+    },
+    {
+      "id": "Q3",
+      "type": "numeric",
+      "text": "Solve 2x + 3 = 7. Show your steps.",
+      "rubric": "subtract three divide two answer two",
+      "max_marks": 6
+    },
+    {
+      "id": "Q4",
+      "type": "essay",
+      "text": "Explain photosynthesis in your own words.",
+      "rubric": "sunlight water carbon dioxide glucose oxygen",
+      "max_marks": 10
+    }
+  ],
+  "answers": [
+    {
+      "id": "A1",
+      "question_id": "Q1",
+      "student_id": "Riya",
+      "answer_text": "Paris"
+    },
+    {
+      "id": "A2",
+      "question_id": "Q2",
+      "student_id": "Riya",
+      "answer_text": "56"
+    },
+    {
+      "id": "A3",
+      "question_id": "Q3",
+      "student_id": "Riya",
+      "answer_text": "subtract three from both sides, then divide by two, the answer is two"
+    },
+    {
+      "id": "A4",
+      "question_id": "Q4",
+      "student_id": "Riya",
+      "answer_text": "Plants use sunlight and water to produce glucose and release oxygen."
+    }
+  ]
+}

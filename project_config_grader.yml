@@ -1,0 +1,41 @@
+# =============================================================================
+# project_config_grader.yml  -  SINGLE SOURCE OF TRUTH for the exam-grader
+# Databricks pipeline (Marvel-style).
+#
+# By externalizing catalog/schema per environment, we enforce the
+# "build-once-deploy-many" principle: the same code runs against dev, acc, or
+# prd just by changing the env argument. Dev data never touches production.
+# =============================================================================
+
+# ---- 1. Environment Isolation (Unity Catalog) ----
+# Free Edition note: you have ONE workspace, so in practice you'll use dev.
+# The acc/prd tiers are here to mirror the Marvel three-tier pattern.
+dev:
+  catalog_name: exam_grader_dev
+  schema_name: grading
+
+acc:
+  catalog_name: exam_grader_acc
+  schema_name: grading
+
+prd:
+  catalog_name: exam_grader_prd
+  schema_name: grading
+
+# ---- 2. The tables this pipeline manages (Delta tables in Unity Catalog) ----
+tables:
+  - questions
+  - answers
+  - grades
+  - audit
+  - predictions
+
+# ---- 3. The Volume for uploaded answer-script images ----
+volume_name: uploads
+
+# ---- 4. Grading settings (externalized, like Marvel's hyperparameters) ----
+grading:
+  # which grader to use in the pipeline: "mock" (free/offline) or "openrouter"
+  grader: mock
+  # default model name recorded in predictions when a real model is used
+  model_name: openrouter/free

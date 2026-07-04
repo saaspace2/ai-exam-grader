@@ -1,0 +1,23 @@
+# -----------------------------------------------------------------------------
+# SETUP JOB - run once per environment to create the catalog, schema, Delta
+# tables, and the uploads Volume. This is the "from scratch" infrastructure.
+# -----------------------------------------------------------------------------
+resources:
+  jobs:
+    setup_job:
+      name: "[${bundle.target}] exam-grader setup"
+      tasks:
+        - task_key: setup_catalog
+          notebook_task:
+            notebook_path: ../databricks_jobs/01_setup_catalog.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+      # a small single-node cluster is plenty for setup
+      job_clusters:
+        - job_cluster_key: small
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: "Standard_DS3_v2"
+            num_workers: 0
+            data_security_mode: SINGLE_USER

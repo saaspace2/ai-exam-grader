@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Exam-Grading System</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+           margin: 0; background: #eef1f7; color: #1e2a3a; }
+    header { background: #1f4e79; color: white; padding: 18px 28px; }
+    header h1 { margin: 0; font-size: 21px; }
+    header p { margin: 4px 0 0; opacity: 0.85; font-size: 13px; }
+    .tabs { display: flex; gap: 4px; background: #17395a; padding: 0 28px; }
+    .tab { padding: 12px 18px; color: #cbd8e8; cursor: pointer; font-size: 14px;
+           border-bottom: 3px solid transparent; }
+    .tab.active { color: white; border-bottom-color: #6fb1e0; font-weight: 600; }
+    .panel { max-width: 980px; margin: 22px auto; padding: 0 16px; display: none; }
+    .panel.active { display: block; }
+    .card { background: white; border-radius: 12px; padding: 22px; margin-bottom: 18px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .card h2 { margin-top: 0; font-size: 16px; color: #1f4e79; }
+    label { display: block; font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
+    input, textarea, select { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1;
+            border-radius: 8px; font-size: 14px; font-family: inherit; }
+    textarea { min-height: 54px; resize: vertical; }
+    button { margin-top: 12px; background: #1f4e79; color: white; border: none;
+             padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    button:hover { background: #17395a; }
+    button.sec { background: #e2e8f0; color: #1f4e79; }
+    button.sec:hover { background: #cbd8e8; }
+    .result { margin-top: 12px; padding: 12px; border-radius: 8px; background: #eef2f9;
+              font-size: 14px; white-space: pre-wrap; min-height: 18px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+    th { color: #1f4e79; }
+    .qrow { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+    .muted { color: #64748b; font-size: 12px; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:20px; font-size:12px;
+            background:#e2e8f0; color:#1f4e79; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AI Exam-Grading System</h1>
+    <p>Set up an exam, upload answer scripts, grade, and handle re-evaluation.</p>
+  </header>
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('teacher')">Teacher</div>
+    <div class="tab" onclick="showTab('student')">Student</div>
+  </div>
+
+  <!-- ==================== TEACHER ==================== -->
+  <div class="panel active" id="panel-teacher">
+    <div class="card">
+      <h2>1. Set up the question paper &amp; answer key</h2>
+      <p class="muted">Add each question with its correct answer (MCQ/numeric) or marking guide (short/essay). You can add as many as you like, then save the paper.</p>
+      <div id="qlist"></div>
+      <button class="sec" onclick="addQuestionRow()">+ Add question</button>
+      <button onclick="savePaper()">Save question paper</button>
+      <div class="result" id="setup_result"></div>
+    </div>
+
+    <div class="card">
+      <h2>2. Upload the question paper (image)</h2>
+      <p class="muted">One image with several numbered questions. The system reads them all. Set a default type &amp; marks (you can refine later).</p>
+      <div class="row2">
+        <div><label>Default type</label>
+          <select id="pp_type"><option>numeric</option><option>mcq</option><option>short</option><option>essay</option></select>
+        </div>
+        <div><label>Default max marks</label><input id="pp_max" type="number" value="5" /></div>
+      </div>
+      <label>Question paper image</label>
+      <input type="file" id="pp_file" accept="image/*" />
+      <button onclick="uploadPaper()">Read question paper</button>
+      <div class="result" id="paper_result"></div>
+    </div>
+
+    <div class="card">
+      <h2>3. Upload the answer key (image)</h2>
+      <p class="muted">One image with the correct answer for each numbered question. Matched to the questions above by number.</p>
+      <label>Answer key image</label>
+      <input type="file" id="key_file" accept="image/*" />
+      <button onclick="uploadKey()">Read answer key</button>
+      <div class="result" id="key_result"></div>
+    </div>
+
+    <div class="card">
+      <h2>3b. Review &amp; edit questions and marks</h2>
+      <p class="muted">Marks read from the paper are shown; missing ones use the default. Edit any marks here, then Save marks.</p>
+      <button class="sec" onclick="loadQuestions()">Load / refresh questions</button>
+      <div id="qtable"></div>
+      <button onclick="saveMarks()">Save marks</button>
+      <div class="result" id="marks_result"></div>
+    </div>
+
+    <div class="card">
+      <h2>4. Upload a student's answer script (image)</h2>
+      <p class="muted">One image with all the student's numbered answers (and their name/ID on the page). Each answer is matched to its question by number and graded.</p>
+      <label>Student ID (optional if written on the script)</label>
+      <input id="sc_sid" placeholder="read from page if blank" />
+      <label>Answer script image</label>
+      <input type="file" id="sc_file" accept="image/*" />
+      <button onclick="uploadFullScript()">Read &amp; grade whole script</button>
+      <div class="result" id="script_result"></div>
+    </div>
+  </div>
+
+  <!-- ==================== STUDENT ==================== -->
+  <div class="panel" id="panel-student">
+    <div class="card">
+      <h2>My results</h2>
+      <label>Student ID (must match what the script was graded under)</label>
+      <input id="r_sid" placeholder="e.g. the ID shown after grading" />
+      <button onclick="loadResults()">Show my results</button>
+      <button class="sec" onclick="listStudents()">List graded students</button>
+      <div class="muted" id="student_list"></div>
+      <div id="results_area"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = window.location.origin;
+
+    function showTab(which) {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+      event.target.classList.add("active");
+      document.getElementById("panel-" + which).classList.add("active");
+      if (which === "student") loadResults();
+    }
+
+    async function postJSON(path, body) {
+      const res = await fetch(API + path, { method: "POST",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      return { ok: res.ok, status: res.status, data: await res.json() };
+    }
+    async function getJSON(path) {
+      const res = await fetch(API + path);
+      return { ok: res.ok, status: res.status, data: await res.json() };
+    }
+
+    // ---------- Teacher: build the question paper ----------
+    let qcount = 0;
+    function addQuestionRow(preset) {
+      qcount++;
+      const i = qcount;
+      const div = document.createElement("div");
+      div.className = "qrow";
+      div.id = "qrow" + i;
+      div.innerHTML = `
+        <div class="row2">
+          <div><label>Question ID</label><input id="q_id_${i}" value="Q${i}" /></div>
+          <div><label>Type</label>
+            <select id="q_type_${i}" onchange="keyLabel(${i})">
+              <option value="mcq">mcq</option><option value="numeric">numeric</option>
+              <option value="short">short</option><option value="essay">essay</option>
+            </select>
+          </div>
+        </div>
+        <label>Question text</label>
+        <input id="q_text_${i}" placeholder="Type the question" />
+        <label id="q_keylabel_${i}">Correct answer</label>
+        <input id="q_key_${i}" placeholder="Correct answer or marking guide" />
+        <div class="row2">
+          <div><label>Max marks</label><input id="q_max_${i}" type="number" value="5" /></div>
+          <div style="display:flex;align-items:flex-end">
+            <button class="sec" onclick="this.closest('.qrow').remove()">Remove</button>
+          </div>
+        </div>`;
+      document.getElementById("qlist").appendChild(div);
+    }
+    function keyLabel(i) {
+      const t = document.getElementById("q_type_" + i).value;
+      document.getElementById("q_keylabel_" + i).textContent =
+        (t === "mcq" || t === "numeric") ? "Correct answer" : "Marking guide (rubric)";
+    }
+
+    async function savePaper() {
+      const questions = [];
+      document.querySelectorAll(".qrow").forEach(row => {
+        const i = row.id.replace("qrow", "");
+        const type = document.getElementById("q_type_" + i).value;
+        const key = document.getElementById("q_key_" + i).value;
+        const q = {
+          id: document.getElementById("q_id_" + i).value,
+          type: type,
+          text: document.getElementById("q_text_" + i).value,
+          max_marks: parseFloat(document.getElementById("q_max_" + i).value),
+        };
+        if (type === "mcq" || type === "numeric") q.correct_answer = key;
+        else q.rubric = key;
+        questions.push(q);
+      });
+      const out = document.getElementById("setup_result");
+      if (!questions.length) { out.textContent = "Add at least one question first."; return; }
+      out.textContent = "Saving...";
+      const r = await postJSON("/setup/paper", { questions });
+      out.textContent = r.ok
+        ? `Saved ${r.data.questions_saved} question(s). You can now upload answer scripts.`
+        : "Error: " + JSON.stringify(r.data.detail);
+    }
+
+    // ---------- Teacher: multi-question uploads ----------
+    async function postFile(endpoint, fileInput, extra) {
+      const form = new FormData();
+      for (const k in (extra||{})) form.append(k, extra[k]);
+      form.append("file", fileInput.files[0]);
+      const res = await fetch(API + endpoint, { method: "POST", body: form });
+      return { ok: res.ok, status: res.status, data: await res.json() };
+    }
+
+    async function uploadPaper() {
+      const out = document.getElementById("paper_result");
+      const fi = document.getElementById("pp_file");
+      if (!fi.files.length) { out.textContent = "Choose the question paper image."; return; }
+      out.textContent = "Reading question paper...";
+      const r = await postFile("/upload/paper", fi, {
+        default_type: document.getElementById("pp_type").value,
+        default_max_marks: document.getElementById("pp_max").value });
+      out.textContent = r.ok
+        ? `Read ${r.data.questions_read} question(s); saved: ${r.data.questions_saved.join(", ")}.\nNow upload the answer key.`
+        : "Error " + r.status + ": " + JSON.stringify(r.data.detail);
+    }
+
+    async function uploadKey() {
+      const out = document.getElementById("key_result");
+      const fi = document.getElementById("key_file");
+      if (!fi.files.length) { out.textContent = "Choose the answer key image."; return; }
+      out.textContent = "Reading answer key...";
+      const r = await postFile("/upload/key", fi, {});
+      out.textContent = r.ok
+        ? `Read ${r.data.answers_read} answer(s); attached to: ${r.data.questions_updated.join(", ")}.\nNow upload a student's script.`
+        : "Error " + r.status + ": " + JSON.stringify(r.data.detail);
+    }
+
+    async function uploadFullScript() {
+      const out = document.getElementById("script_result");
+      const fi = document.getElementById("sc_file");
+      if (!fi.files.length) { out.textContent = "Choose the answer script image."; return; }
+      out.textContent = "Reading & grading whole script...";
+      const r = await postFile("/upload/script-full", fi, {
+        student_id: document.getElementById("sc_sid").value });
+      if (!r.ok) { out.textContent = "Error " + r.status + ": " + JSON.stringify(r.data.detail); return; }
+      const d = r.data;
+      // auto-fill the student results box with THIS student's id, so the
+      // student tab shows the right results without guessing.
+      document.getElementById("r_sid").value = d.student_id;
+      let txt = `Student: ${d.student_id}  (open the Student tab to see these results)\n`;
+      txt += `Total: ${d.total} / ${d.out_of}\n\n`;
+      d.results.forEach(row => {
+        txt += row.error
+          ? `  ${row.question_id}: (${row.error})\n`
+          : `  ${row.question_id}: read "${row.answer_read}" -> ${row.marks_awarded}/${row.max_marks} (${row.grading_method})\n`;
+      });
+      out.textContent = txt;
+    }
+
+    // ---------- Student: results + doubt/re-evaluate ----------
+    async function listStudents() {
+      const el = document.getElementById("student_list");
+      el.textContent = "Loading...";
+      const r = await getJSON("/students");
+      el.textContent = (r.ok && r.data.students.length)
+        ? "Graded students: " + r.data.students.join(", ")
+        : "No students graded yet.";
+    }
+    async function loadResults() {
+      const sid = document.getElementById("r_sid").value;
+      const area = document.getElementById("results_area");
+      area.innerHTML = "<p class='muted'>Loading...</p>";
+      const r = await getJSON("/results/" + sid);
+      if (!r.ok || !r.data.results.length) {
+        area.innerHTML = "<p class='muted'>No results yet for this student.</p>";
+        return;
+      }
+      let html = `<table><tr><th>Question</th><th>Marks</th><th>Status</th><th>Actions</th></tr>`;
+      r.data.results.forEach(row => {
+        html += `<tr>
+          <td>${row.question_id}</td>
+          <td>${row.marks_awarded} / ${row.max_marks}</td>
+          <td><span class="pill">${row.status}</span></td>
+          <td>
+            <button class="sec" onclick="why('${sid}','${row.question_id}')">Why?</button>
+            <button class="sec" onclick="doubt('${sid}','${row.question_id}')">Raise doubt</button>
+            <button onclick="reeval('${sid}','${row.question_id}')">Re-evaluate</button>
+          </td></tr>
+          <tr><td colspan="4"><div class="result" id="res_${row.question_id}" style="display:none"></div></td></tr>`;
+      });
+      html += `</table><p class="muted" style="margin-top:10px">Total: ${r.data.total} / ${r.data.out_of}</p>`;
+      area.innerHTML = html;
+    }
+    function showRes(qid, text) {
+      const el = document.getElementById("res_" + qid);
+      el.style.display = "block"; el.textContent = text;
+    }
+    async function why(sid, qid) {
+      showRes(qid, "Asking...");
+      const r = await postJSON("/clarify", { student_id: sid, question_id: qid });
+      showRes(qid, r.ok ? r.data.explanation : "Error");
+    }
+    async function doubt(sid, qid) {
+      showRes(qid, "Raising doubt...");
+      const r = await postJSON("/doubt", { student_id: sid, question_id: qid, reason: null });
+      showRes(qid, r.ok ? "Doubt raised - flagged for re-evaluation." : "Error");
+    }
+    async function reeval(sid, qid) {
+      showRes(qid, "Re-evaluating...");
+      const r = await postJSON("/reevaluate", { student_id: sid, question_id: qid, student_reason: null });
+      if (!r.ok) { showRes(qid, "Error"); return; }
+      const d = r.data;
+      showRes(qid, d.needs_confirmation
+        ? "WARNING: " + d.message + "\n(Mark NOT changed - would need confirmation to lower.)"
+        : d.message);
+      if (d.applied) loadResults();
+    }
+
+    // ---------- Teacher: review & edit marks ----------
+    async function loadQuestions() {
+      const area = document.getElementById("qtable");
+      area.innerHTML = "<p class='muted'>Loading...</p>";
+      const r = await getJSON("/questions");
+      if (!r.ok || !r.data.questions.length) {
+        area.innerHTML = "<p class='muted'>No questions yet - upload a paper first.</p>";
+        return;
+      }
+      let html = "<table><tr><th>Question</th><th>Type</th><th>Text</th><th>Max marks</th></tr>";
+      r.data.questions.forEach(q => {
+        html += `<tr>
+          <td>${q.id}</td><td>${q.type}</td>
+          <td>${(q.text||"").slice(0,40)}</td>
+          <td><input id="mk_${q.id}" type="number" value="${q.max_marks}" style="width:80px" /></td>
+        </tr>`;
+      });
+      html += "</table>";
+      area.innerHTML = html;
+      area.dataset.ids = r.data.questions.map(q => q.id).join(",");
+    }
+    async function saveMarks() {
+      const out = document.getElementById("marks_result");
+      const ids = (document.getElementById("qtable").dataset.ids || "").split(",").filter(Boolean);
+      if (!ids.length) { out.textContent = "Load questions first."; return; }
+      const updates = ids.map(id => ({
+        question_id: id,
+        max_marks: parseFloat(document.getElementById("mk_" + id).value),
+      }));
+      out.textContent = "Saving marks...";
+      const r = await postJSON("/questions/marks", { updates });
+      out.textContent = r.ok ? `Saved marks for: ${r.data.updated.join(", ")}.` : "Error";
+    }
+
+    // start with one question row
+    addQuestionRow();
+  </script>
+</body>
+</html>
