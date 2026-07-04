@@ -19,6 +19,20 @@
 
 # COMMAND ----------
 
+# If the import below ever fails with 'No module named grader', it means
+# the %pip cell above did not run first. Run this notebook TOP to BOTTOM:
+# run the %pip install cell, let %restart_python finish, THEN the rest.
+# As a fallback, add the repo's src/ to the path directly:
+import os, sys
+_here = os.getcwd()
+_root = _here if os.path.exists(os.path.join(_here, 'pyproject.toml')) else os.path.dirname(_here)
+_src = os.path.join(_root, 'src')
+if _src not in sys.path:
+    sys.path.insert(0, _src)
+print('Using src path:', _src)
+
+# COMMAND ----------
+
 # Load the config for this environment. Change env to "acc" or "prd" to target
 # those environments with the SAME code (build-once-deploy-many).
 from grader.project_config import ProjectConfig
