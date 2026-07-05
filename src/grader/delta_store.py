@@ -62,7 +62,7 @@ class DeltaStore:
 
     # ---- questions ----------------------------------------------------
     def save_question(self, question: Question) -> None:
-        q = question.model_dump()
+        q = question.model_dump(mode="json")
         self._insert("questions", {
             "id": q["id"], "type": q["type"], "text": q.get("text"),
             "correct_answer": q.get("correct_answer"), "rubric": q.get("rubric"),
@@ -91,7 +91,7 @@ class DeltaStore:
             raise ValueError(
                 f"Answer for {answer.student_id}/{answer.question_id} already exists."
             )
-        a = answer.model_dump()
+        a = answer.model_dump(mode="json")
         self._insert("answers", {
             "id": a["id"], "question_id": a["question_id"],
             "student_id": a["student_id"], "answer_text": a["answer_text"],
@@ -114,7 +114,7 @@ class DeltaStore:
             raise ValueError(
                 f"Grade for {grade.student_id}/{grade.question_id} already exists."
             )
-        g = grade.model_dump()
+        g = grade.model_dump(mode="json")
         self._insert("grades", {
             "id": g["id"], "answer_id": g["answer_id"],
             "question_id": g["question_id"], "student_id": g["student_id"],
@@ -166,13 +166,13 @@ class DeltaStore:
                 justification = {self._sql_str(grade.justification)},
                 confidence = {grade.confidence},
                 grading_method = {self._sql_str(grade.grading_method)},
-                status = {self._sql_str(grade.status)}
+                status = {self._sql_str(grade.status.value if hasattr(grade.status, 'value') else grade.status)}
             WHERE id = {self._sql_str(grade.id)}
         """)
 
     # ---- audit (append-only) -----------------------------------------
     def _append_audit(self, entry: AuditEntry) -> None:
-        e = entry.model_dump()
+        e = entry.model_dump(mode="json")
         self._insert("audit", {
             "id": e["id"], "grade_record_id": e["grade_record_id"],
             "timestamp": str(e.get("timestamp", "")),
