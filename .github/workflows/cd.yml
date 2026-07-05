@@ -1,6 +1,7 @@
-# CD - runs on push/merge to main. Deploys the Databricks bundle to acc then prd.
-# (Mirrors the Marvel CD pipeline. Needs a paid workspace + service principals to
-# actually deploy; on Free Edition this is a portfolio reference.)
+# CD - runs on push/merge to main. Deploys the Databricks bundle.
+# Uses Marvel's approach: write ~/.databrickscfg explicitly from GitHub secrets,
+# then databricks bundle deploy. Targets 'dev' (the catalog that exists on this
+# Free Edition workspace). Add acc/prd targets when those catalogs exist.
 name: CD
 
 on:
@@ -14,10 +15,6 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        environment: [acc, prd]
-    environment: ${{ matrix.environment }}
     env:
       DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
       DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
@@ -28,8 +25,15 @@ jobs:
       - name: Install Databricks CLI
         uses: databricks/setup-cli@main
 
-      - name: Deploy bundle
-        env:
-          DATABRICKS_BUNDLE_ENV: ${{ matrix.environment }}
+      - name: Configure Databricks CLI
         run: |
-          databricks bundle deploy -t ${{ matrix.environment }}
+          cat > ~/.databrickscfg << CFG
+          [DEFAULT]
+          host = ${{ vars.DATABRICKS_HOST }}
+          client_id = ${{ secrets.DATABRICKS_CLIENT_ID }}
+          client_secret = ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+          CFG
+
+      - name: Deploy bundle to dev
+        run: |
+          databricks bundle deploy -t dev
