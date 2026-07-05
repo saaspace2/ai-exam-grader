@@ -24,6 +24,11 @@ if _src not in sys.path:
 
 # COMMAND ----------
 
+import os
+# Official fix for AccessDenied on UC model artifact upload (esp. on Free Edition):
+# route artifact upload through the Databricks SDK instead of a direct S3 URL.
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "True"
+
 import mlflow
 import pandas as pd
 from mlflow.models import infer_signature
