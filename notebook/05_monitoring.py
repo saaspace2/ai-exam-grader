@@ -1,11 +1,11 @@
 # Databricks notebook source
 # =============================================================================
-# 05_monitoring.py  -  Monitor grading quality over time.
+# 05_monitoring.py  -  Build the monitoring table from the payload (Marvel-style).
 #
-# Builds a monitoring VIEW over the predictions + audit tables to watch for
-# quality signals: average score, appeal rate, and OCR-read issues over time.
-# The plain SQL/Delta parts run on Free Edition. The Databricks "Lakehouse
-# Quality Monitor" at the end runs on serverless (Free Edition quota applies) - marked clearly.
+# Marvel's create_or_refresh_monitoring reads the endpoint's payload table
+# (custom_model_payload), parses the request/response JSON, and writes a
+# structured model_monitoring table. We do the same: build a payload-shaped
+# table from real grading data, parse it, and create model_monitoring.
 # =============================================================================
 
 # COMMAND ----------
@@ -15,82 +15,119 @@
 
 # COMMAND ----------
 
-# If the import below ever fails with 'No module named grader', it means
-# the %pip cell above did not run first. Run this notebook TOP to BOTTOM:
-# run the %pip install cell, let %restart_python finish, THEN the rest.
-# As a fallback, add the repo's src/ to the path directly:
 import os, sys
 _here = os.getcwd()
-_root = _here if os.path.exists(os.path.join(_here, 'pyproject.toml')) else os.path.dirname(_here)
-_src = os.path.join(_root, 'src')
+_root = _here if os.path.exists(os.path.join(_here, "pyproject.toml")) else os.path.dirname(_here)
+_src = os.path.join(_root, "src")
 if _src not in sys.path:
     sys.path.insert(0, _src)
-print('Using src path:', _src)
 
-# COMMAND ----------
-
+from pyspark.sql import functions as F
+from pyspark.sql.types import (ArrayType, DoubleType, StringType,
+                               StructField, StructType)
 from grader.project_config import ProjectConfig
+
 config = ProjectConfig.from_yaml("../project_config_grader.yml", env="dev")
 base = config.base_path
+PAYLOAD = f"{base}.grader_inference_payload"
 
 # COMMAND ----------
 
-# 1. A monitoring table: daily grading stats (runs on Free Edition).
+# 1. Ensure a payload table exists in the request/response JSON shape Marvel uses.
+#    (If the AI Gateway payload table is populated, point PAYLOAD at it instead.)
+#    We build it from predictions so monitoring always has real data to parse.
 spark.sql(f"""
-CREATE OR REPLACE TABLE {base}.model_monitoring AS
+CREATE OR REPLACE TABLE {PAYLOAD} AS
 SELECT
-    to_date(created_at)                       AS day,
-    count(*)                                  AS predictions,
-    avg(marks_awarded / max_marks)            AS avg_score_fraction,
-    sum(CASE WHEN marks_awarded = 0 THEN 1 ELSE 0 END) AS zero_score_count,
-    model_used
+    id AS databricks_request_id,
+    created_at AS request_time,
+    to_json(named_struct(
+        'dataframe_records', array(named_struct(
+            'student_id', student_id,
+            'question_id', question_id,
+            'answer_read', answer_read
+        ))
+    )) AS request,
+    to_json(named_struct(
+        'predictions', array(named_struct(
+            'marks_awarded', marks_awarded,
+            'max_marks', max_marks
+        ))
+    )) AS response,
+    model_used AS model_name
 FROM {base}.predictions
-GROUP BY to_date(created_at), model_used
 """)
-print("Monitoring table created.")
-display(spark.sql(f"SELECT * FROM {base}.model_monitoring ORDER BY day"))
+print("Payload table ready:", PAYLOAD)
+display(spark.sql(f"SELECT * FROM {PAYLOAD} LIMIT 5"))
 
 # COMMAND ----------
 
-# 2. Appeal-rate signal from the audit trail (a quality indicator).
+# 2. Parse the request/response JSON (Marvel's from_json + explode pattern).
+request_schema = StructType([
+    StructField("dataframe_records", ArrayType(StructType([
+        StructField("student_id", StringType(), True),
+        StructField("question_id", StringType(), True),
+        StructField("answer_read", StringType(), True),
+    ])), True)
+])
+response_schema = StructType([
+    StructField("predictions", ArrayType(StructType([
+        StructField("marks_awarded", DoubleType(), True),
+        StructField("max_marks", DoubleType(), True),
+    ])), True)
+])
+
+payload = spark.table(PAYLOAD)
+parsed = (payload
+    .withColumn("req", F.from_json(F.col("request"), request_schema))
+    .withColumn("resp", F.from_json(F.col("response"), response_schema)))
+
+exploded = parsed.withColumn("rec", F.explode(F.col("req.dataframe_records")))
+
+final = exploded.select(
+    F.col("request_time").alias("timestamp"),
+    F.col("databricks_request_id"),
+    F.col("rec.student_id").alias("student_id"),
+    F.col("rec.question_id").alias("question_id"),
+    F.col("rec.answer_read").alias("answer_read"),
+    F.col("resp.predictions")[0]["marks_awarded"].alias("marks_awarded"),
+    F.col("resp.predictions")[0]["max_marks"].alias("max_marks"),
+    F.col("model_name"),
+)
+
+# COMMAND ----------
+
+# 3. Write the structured monitoring table (Marvel appends to model_monitoring).
+(final.write.format("delta").mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{base}.model_monitoring"))
+
+spark.sql(f"ALTER TABLE {base}.model_monitoring "
+          f"SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
+
+written = spark.table(f"{base}.model_monitoring").count()
+print(f"model_monitoring rows: {written}")
+display(spark.sql(f"SELECT * FROM {base}.model_monitoring ORDER BY timestamp DESC"))
+
+# COMMAND ----------
+
+# 4. Quality signals over the monitoring table (score level, zero-score rate).
 display(spark.sql(f"""
 SELECT
-    action,
-    count(*) AS times
-FROM {base}.audit
-GROUP BY action
-ORDER BY times DESC
+    to_date(timestamp)                              AS day,
+    count(*)                                        AS predictions,
+    round(avg(marks_awarded / max_marks), 3)        AS avg_score_fraction,
+    sum(CASE WHEN marks_awarded = 0 THEN 1 ELSE 0 END) AS zero_score_count,
+    model_name
+FROM {base}.model_monitoring
+GROUP BY to_date(timestamp), model_name
+ORDER BY day
 """))
 
 # COMMAND ----------
 
-# 3. Enable Change Data Feed so a monitor can process only new rows.
-spark.sql(f"ALTER TABLE {base}.model_monitoring "
-          f"SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
-print("CDF enabled on monitoring table.")
-
-# COMMAND ----------
-
 # MAGIC %md
-# MAGIC ## NOTE (Free Edition): Lakehouse Quality Monitor
-# MAGIC The block below creates a Databricks **Quality Monitor** (drift/quality
-# MAGIC dashboards). This runs on serverless (Free Edition quota applies) - it runs on Free Edition serverless (within quota),
-# MAGIC but is included to match the Marvel monitoring stage.
-
-# COMMAND ----------
-
-from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.catalog import MonitorInferenceLog, MonitorInferenceLogProblemType
-# w = WorkspaceClient()
-# w.quality_monitors.create(
-#     table_name=f"{base}.model_monitoring",
-#     assets_dir=f"/Workspace/Shared/monitoring/{base}",
-#     output_schema_name=base,
-#     inference_log=MonitorInferenceLog(
-#         problem_type=MonitorInferenceLogProblemType.PROBLEM_TYPE_CLASSIFICATION,
-#         prediction_col="avg_score_fraction",
-#         timestamp_col="day",
-#         granularities=["1 day"],
-#         model_id_col="model_used",
-#     ),
-# )
+# MAGIC ## PAID/monitor: Lakehouse Quality Monitor
+# MAGIC With model_monitoring built, a Databricks Quality Monitor can sit on top
+# MAGIC (drift dashboards) exactly as in Marvel. That step uses
+# MAGIC workspace.quality_monitors.create(...) on {base}.model_monitoring.
