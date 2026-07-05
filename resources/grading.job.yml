@@ -16,8 +16,3 @@ resources:
             - task_key: batch_grade
           notebook_task:
             notebook_path: ../notebook/04_mlflow_tracking.py
-
-      schedule:
-        quartz_cron_expression: "0 0 * * * ?"
-        timezone_id: "UTC"
-        pause_status: UNPAUSED

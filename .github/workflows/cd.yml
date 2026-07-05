@@ -1,13 +1,13 @@
-# CD - runs on push/merge to main. Deploys the Databricks bundle.
-# Uses Marvel's approach: write ~/.databrickscfg explicitly from GitHub secrets,
-# then databricks bundle deploy. Targets 'dev' (the catalog that exists on this
-# Free Edition workspace). Add acc/prd targets when those catalogs exist.
+# CD - runs on push/merge to main. Deploys the bundle to Databricks AND runs
+# the grading job (so a push triggers a real run - not a timed schedule).
+# Adapted from the Marvel CD pipeline for this Free Edition single-target setup.
 name: CD
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - 'main'
 
 permissions:
   contents: write
@@ -20,7 +20,8 @@ jobs:
       DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
       DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
 
       - name: Install Databricks CLI
         uses: databricks/setup-cli@main
@@ -34,6 +35,14 @@ jobs:
           client_secret = ${{ secrets.DATABRICKS_CLIENT_SECRET }}
           CFG
 
-      - name: Deploy bundle to dev
+      - name: Deploy Bundle to Databricks (dev)
+        env:
+          DATABRICKS_BUNDLE_ENV: dev
         run: |
           databricks bundle deploy -t dev
+
+      - name: Run the grading job on Databricks
+        env:
+          DATABRICKS_BUNDLE_ENV: dev
+        run: |
+          databricks bundle run grading_job -t dev
