@@ -6,7 +6,11 @@
 # reference it as code/<wheel> inside an explicit conda_env built with
 # _mlflow_conda_env, and pass BOTH code_paths and conda_env to log_model. Passing
 # an explicit conda_env avoids the auto-generated python_env.yaml that fails to
+<<<<<<< HEAD
 # upload on Free Edition. 2
+=======
+# upload on Free Edition.2
+>>>>>>> 54f7c58bb852dd178c0dbe8a4db24bdc26dd0de8
 # =============================================================================
 
 # COMMAND ----------
@@ -191,4 +195,8 @@ try:
     )
     print("Endpoint response:", response)
 except Exception as e:
+<<<<<<< HEAD
     print("Not ready yet (wait for READY, then retry):", e)
+=======
+    print("Not ready yet (wait for READY, then retry):", e)
+>>>>>>> 54f7c58bb852dd178c0dbe8a4db24bdc26dd0de8
