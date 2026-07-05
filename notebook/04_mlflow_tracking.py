@@ -40,7 +40,6 @@ from grader.batch_grader import BatchGrader
 config = ProjectConfig.from_yaml("../project_config_grader.yml", env="dev")
 store = DeltaStore(config, spark)
 
-<<<<<<< HEAD
 # --- Serverless workaround -------------------------------------------------
 # On serverless compute, spark.mlflow.modelRegistryUri is not set, so MLflow
 # raises CONFIG_NOT_AVAILABLE when it tries to read it. We set the registry URI
@@ -54,16 +53,6 @@ mlflow.set_registry_uri("databricks")
 
 # Use the current user's workspace folder for the experiment (reliable on serverless).
 username = spark.sql("SELECT current_user()").collect()[0][0]
-=======
-# Point MLflow at the Databricks tracking server explicitly (needed on serverless).
-mlflow.set_tracking_uri("databricks")
-
-# Use the current user's workspace folder for the experiment - more reliable on
-# serverless than /Shared. Build the path from the logged-in user's name.
-username = (
-    spark.sql("SELECT current_user()").collect()[0][0]
-)
->>>>>>> 70be3bf789c22875a5c640e69a5cfc4698ad2630
 experiment_path = f"/Users/{username}/exam-grader-grading-runs"
 experiment = mlflow.set_experiment(experiment_path)
 print("Experiment:", experiment.name)
