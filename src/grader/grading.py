@@ -225,12 +225,30 @@ class OpenRouterAIGrader(AIGrader):
 
 
 def get_ai_grader() -> AIGrader:
-    """Pick the AI grader: the real one if a key is configured, else the mock."""
+    """Pick the AI grader based on configuration.
+
+    Priority:
+      1. If USE_DATABRICKS_ENDPOINT is set AND the endpoint config exists ->
+         DatabricksGrader (routes grading through the deployed endpoint).
+      2. Else if an OpenRouter key is set -> OpenRouterAIGrader.
+      3. Else -> the free, offline MockAIGrader.
+    """
+    import os
     from grader.config import settings
+
+    # Option 1: route through the Databricks serving endpoint.
+    if os.environ.get("USE_DATABRICKS_ENDPOINT", "").lower() in ("1", "true", "yes"):
+        if os.environ.get("DATABRICKS_ENDPOINT_URL") and os.environ.get("DATABRICKS_TOKEN"):
+            from grader.databricks_grader import DatabricksGrader
+            return DatabricksGrader()
+
+    # Option 2: OpenRouter directly.
     if settings.has_api_key():
         return OpenRouterAIGrader(
             api_key=settings.OPENROUTER_API_KEY,
             model=settings.OPENROUTER_MODEL,
             base_url=settings.OPENROUTER_BASE_URL,
         )
+
+    # Option 3: offline mock.
     return MockAIGrader()
