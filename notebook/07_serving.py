@@ -16,6 +16,9 @@
 # COMMAND ----------
 
 import os, sys
+# MUST be set BEFORE importing mlflow, so the UC artifact repo uses the SDK path.
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "True"
+
 _here = os.getcwd()
 _root = _here if os.path.exists(os.path.join(_here, "pyproject.toml")) else os.path.dirname(_here)
 _src = os.path.join(_root, "src")
@@ -23,11 +26,6 @@ if _src not in sys.path:
     sys.path.insert(0, _src)
 
 # COMMAND ----------
-
-import os
-# Official fix for AccessDenied on UC model artifact upload (esp. on Free Edition):
-# route artifact upload through the Databricks SDK instead of a direct S3 URL.
-os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "True"
 
 import mlflow
 import pandas as pd
