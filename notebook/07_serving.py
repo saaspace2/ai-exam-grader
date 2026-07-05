@@ -1,4 +1,4 @@
-# Databricks notebook source 2
+# Databricks notebook source
 # =============================================================================
 # 07_serving.py  -  Deploy the grader as a serving endpoint (EXACT Marvel method).
 #
@@ -6,12 +6,13 @@
 # reference it as code/<wheel> inside an explicit conda_env built with
 # _mlflow_conda_env, and pass BOTH code_paths and conda_env to log_model. Passing
 # an explicit conda_env avoids the auto-generated python_env.yaml that fails to
-# upload on Free Edition.
+# upload on Free Edition.2
 # =============================================================================
 
 # COMMAND ----------
 
 # MAGIC %pip install -e ..
+# MAGIC %pip install --upgrade "mlflow>=3.1"
 # MAGIC %restart_python
 
 # COMMAND ----------
