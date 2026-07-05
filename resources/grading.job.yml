@@ -1,5 +1,7 @@
 # -----------------------------------------------------------------------------
-# GRADING JOB - batch grade, then refresh downstream. SERVERLESS.
+# GRADING JOB - batch grade -> track -> UPDATE the serving endpoint.
+# Each run bumps the model version and rolls the endpoint (like Marvel).
+# SERVERLESS. Runs when CD triggers it (databricks bundle run grading_job).
 # -----------------------------------------------------------------------------
 resources:
   jobs:
@@ -9,10 +11,15 @@ resources:
         - task_key: batch_grade
           notebook_task:
             notebook_path: ../notebook/03_batch_grade.py
-          # serverless - no job_cluster_key
 
         - task_key: mlflow_tracking
           depends_on:
             - task_key: batch_grade
           notebook_task:
             notebook_path: ../notebook/04_mlflow_tracking.py
+
+        - task_key: deploy_model
+          depends_on:
+            - task_key: mlflow_tracking
+          notebook_task:
+            notebook_path: ../notebook/09_deploy_model.py
