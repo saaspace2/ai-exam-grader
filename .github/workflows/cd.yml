@@ -1,0 +1,35 @@
+# CD - runs on push/merge to main. Deploys the Databricks bundle to acc then prd.
+# (Mirrors the Marvel CD pipeline. Needs a paid workspace + service principals to
+# actually deploy; on Free Edition this is a portfolio reference.)
+name: CD
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [acc, prd]
+    environment: ${{ matrix.environment }}
+    env:
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Databricks CLI
+        uses: databricks/setup-cli@main
+
+      - name: Deploy bundle
+        env:
+          DATABRICKS_BUNDLE_ENV: ${{ matrix.environment }}
+        run: |
+          databricks bundle deploy -t ${{ matrix.environment }}
