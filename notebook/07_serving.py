@@ -32,14 +32,11 @@ from grader.grading import grade_answer
 from grader.project_config import ProjectConfig
 
 config = ProjectConfig.from_yaml("../project_config_grader.yml", env="dev")
-<<<<<<< HEAD
 # Serverless workaround: set the registry URI manually (spark config not available).
 import mlflow.tracking._model_registry.utils
 mlflow.tracking._model_registry.utils._get_registry_uri_from_spark_session = (
     lambda: "databricks-uc"
 )
-=======
->>>>>>> 70be3bf789c22875a5c640e69a5cfc4698ad2630
 mlflow.set_tracking_uri("databricks")
 mlflow.set_registry_uri("databricks-uc")   # register models in Unity Catalog
 MODEL_NAME = f"{config.base_path}.grader_model"
