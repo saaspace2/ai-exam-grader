@@ -39,8 +39,16 @@ from grader.batch_grader import BatchGrader
 config = ProjectConfig.from_yaml("../project_config_grader.yml", env="dev")
 store = DeltaStore(config, spark)
 
-# On Databricks, MLflow is auto-configured to the workspace tracking server.
-experiment = mlflow.set_experiment("/Shared/exam-grader-grading-runs")
+# Point MLflow at the Databricks tracking server explicitly (needed on serverless).
+mlflow.set_tracking_uri("databricks")
+
+# Use the current user's workspace folder for the experiment - more reliable on
+# serverless than /Shared. Build the path from the logged-in user's name.
+username = (
+    spark.sql("SELECT current_user()").collect()[0][0]
+)
+experiment_path = f"/Users/{username}/exam-grader-grading-runs"
+experiment = mlflow.set_experiment(experiment_path)
 print("Experiment:", experiment.name)
 
 # COMMAND ----------
@@ -90,7 +98,7 @@ with mlflow.start_run(run_name="batch-grading-run") as run:
 # COMMAND ----------
 
 # Query past runs (like Marvel's search_runs) to compare over time.
-runs = mlflow.search_runs(experiment_names=["/Shared/exam-grader-grading-runs"])
+runs = mlflow.search_runs(experiment_names=[experiment_path])
 display(runs[["run_id", "metrics.graded_this_run", "metrics.avg_score_fraction",
               "metrics.appealed_count"]] if len(runs) else runs)
 
