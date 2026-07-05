@@ -32,6 +32,7 @@ from grader.grading import grade_answer
 from grader.project_config import ProjectConfig
 
 config = ProjectConfig.from_yaml("../project_config_grader.yml", env="dev")
+mlflow.set_tracking_uri("databricks")
 mlflow.set_registry_uri("databricks-uc")   # register models in Unity Catalog
 MODEL_NAME = f"{config.base_path}.grader_model"
 ENDPOINT_NAME = "exam-grader-serving"
