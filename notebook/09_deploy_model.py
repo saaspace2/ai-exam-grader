@@ -1,11 +1,11 @@
 # Databricks notebook source
 # =============================================================================
-# 09_deploy_model.py  -  Update the serving endpoint to the latest model version.
+# 09_deploy_model.py  -  Register a NEW model version and roll the endpoint.
 #
-# Runs as the last task in the grading job. Rather than re-logging the model with
-# env_pack every run (which is fragile in a job), this reliably rolls the endpoint
-# to the LATEST already-registered version of grader_model. To publish NEW grading
-# code, run 07_serving.py (which logs a fresh version), then this promotes it.
+# Runs as the last task in the grading job. Each run logs a fresh model version
+# (like Marvel's deploy step) and updates the serving endpoint to it, so every
+# job run bumps the endpoint version. Uses the conda_env approach (no env_pack,
+# which fails inside a job's isolated pip step).
 # =============================================================================
 
 # COMMAND ----------
@@ -16,15 +16,33 @@
 
 # COMMAND ----------
 
-import os, sys
+import os, sys, glob, subprocess, json
+os.environ["MLFLOW_USE_DATABRICKS_SDK_MODEL_ARTIFACTS_REPO_FOR_UC"] = "True"
 _here = os.getcwd()
 _root = _here if os.path.exists(os.path.join(_here, "pyproject.toml")) else os.path.dirname(_here)
 _src = os.path.join(_root, "src")
 if _src not in sys.path:
     sys.path.insert(0, _src)
 
+# COMMAND ----------
+
+# Build the wheel (for code_paths).
+subprocess.run([sys.executable, "-m", "pip", "install", "build", "--quiet"],
+               capture_output=True, text=True)
+subprocess.run([sys.executable, "-m", "build", "--wheel", _root],
+               capture_output=True, text=True)
+wheels = glob.glob(os.path.join(_root, "dist", "*.whl"))
+wheel_path = sorted(wheels)[-1] if wheels else None
+print("Wheel:", wheel_path)
+
+# COMMAND ----------
+
 import mlflow
 import mlflow.tracking._model_registry.utils
+import pandas as pd
+from mlflow.models import infer_signature
+from mlflow.utils.environment import _mlflow_conda_env
+
 mlflow.tracking._model_registry.utils._get_registry_uri_from_spark_session = (
     lambda: "databricks-uc"
 )
@@ -36,38 +54,78 @@ config = ProjectConfig.from_yaml("../project_config_grader.yml", env="dev")
 MODEL_NAME = f"{config.base_path}.grader_model"
 ENDPOINT_NAME = "exam-grader-serving"
 
+username = spark.sql("SELECT current_user()").collect()[0][0]
+mlflow.set_experiment(f"/Users/{username}/exam-grader-serving")
+
 # COMMAND ----------
 
-# 1. Find the latest registered version of the model.
+class GraderModel(mlflow.pyfunc.PythonModel):
+    def predict(self, context, model_input):
+        from grader.models import Question, StudentAnswer
+        from grader.grading import grade_answer
+        import json
+        results = []
+        for _, row in model_input.iterrows():
+            q = Question(**json.loads(row["question_json"]))
+            a = StudentAnswer(**json.loads(row["answer_json"]))
+            record = grade_answer(q, a)
+            results.append({"marks_awarded": record.marks_awarded,
+                            "max_marks": record.max_marks,
+                            "justification": record.justification})
+        return results
+
+# COMMAND ----------
+
+# 1. Log the model with an explicit conda_env (avoids python_env.yaml upload issue).
+example = pd.DataFrame([{
+    "question_json": json.dumps({"id": "Q1", "type": "mcq",
+        "text": "Capital of France?", "correct_answer": "Paris", "max_marks": 2}),
+    "answer_json": json.dumps({"id": "A1", "question_id": "Q1",
+        "student_id": "Riya", "answer_text": "Paris"}),
+}])
+signature = infer_signature(example,
+    [{"marks_awarded": 2.0, "max_marks": 2.0, "justification": "..."}])
+
+# Only real PyPI deps (NOT the wheel - code_paths handles the code).
+conda_env = _mlflow_conda_env(
+    additional_pip_deps=["pydantic>=2", "requests", "python-dotenv"]
+)
+
+import inspect
+sig_params = set(inspect.signature(mlflow.pyfunc.log_model).parameters.keys())
+kwargs = dict(python_model=GraderModel(), signature=signature, conda_env=conda_env)
+kwargs["name" if "name" in sig_params else "artifact_path"] = "grader_model"
+if wheel_path:
+    kwargs["code_paths" if "code_paths" in sig_params else "code_path"] = [wheel_path]
+
+with mlflow.start_run(run_name="job-redeploy"):
+    model_info = mlflow.pyfunc.log_model(**kwargs)
+
+# 2. Register a NEW version - plain register (NO env_pack; that pip step fails in jobs).
+registered = mlflow.register_model(model_info.model_uri, MODEL_NAME)
 from mlflow.tracking import MlflowClient
 client = MlflowClient(registry_uri="databricks-uc")
-versions = client.search_model_versions(f"name='{MODEL_NAME}'")
-if not versions:
-    raise RuntimeError(
-        f"No registered versions of {MODEL_NAME}. Run 07_serving.py first to "
-        f"log + register a servable version."
-    )
-latest = max(int(v.version) for v in versions)
-print(f"Latest registered version: {latest}")
+client.set_registered_model_alias(MODEL_NAME, "latest-model", registered.version)
+print(f"New model version: {registered.version}")
 
 # COMMAND ----------
 
-# 2. Update the serving endpoint to that version (rolls the endpoint).
+# 3. Roll the serving endpoint to the new version.
 from mlflow.deployments import get_deploy_client
 deploy = get_deploy_client("databricks")
 endpoint_config = {
     "served_entities": [{
         "name": "grader-entity",
         "entity_name": MODEL_NAME,
-        "entity_version": str(latest),
+        "entity_version": str(registered.version),
         "workload_size": "Small",
         "scale_to_zero_enabled": True,
     }],
 }
 try:
     deploy.update_endpoint(endpoint=ENDPOINT_NAME, config=endpoint_config)
-    print(f"Endpoint '{ENDPOINT_NAME}' updated to version {latest}.")
+    print(f"Endpoint '{ENDPOINT_NAME}' updated to version {registered.version}.")
 except Exception as e:
     print("Update failed, trying create:", e)
     deploy.create_endpoint(name=ENDPOINT_NAME, config=endpoint_config)
-    print(f"Endpoint '{ENDPOINT_NAME}' created at version {latest}.")
+    print(f"Endpoint '{ENDPOINT_NAME}' created at version {registered.version}.")
