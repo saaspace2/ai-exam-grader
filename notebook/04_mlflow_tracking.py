@@ -32,6 +32,7 @@ print('Using src path:', _src)
 # COMMAND ----------
 
 import mlflow
+import mlflow.tracking._model_registry.utils
 from grader.project_config import ProjectConfig
 from grader.delta_store import DeltaStore
 from grader.batch_grader import BatchGrader
@@ -39,8 +40,21 @@ from grader.batch_grader import BatchGrader
 config = ProjectConfig.from_yaml("../project_config_grader.yml", env="dev")
 store = DeltaStore(config, spark)
 
-# On Databricks, MLflow is auto-configured to the workspace tracking server.
-experiment = mlflow.set_experiment("/Shared/exam-grader-grading-runs")
+# --- Serverless workaround -------------------------------------------------
+# On serverless compute, spark.mlflow.modelRegistryUri is not set, so MLflow
+# raises CONFIG_NOT_AVAILABLE when it tries to read it. We set the registry URI
+# manually by patching the lookup function. (Known Databricks serverless fix.)
+mlflow.tracking._model_registry.utils._get_registry_uri_from_spark_session = (
+    lambda: "databricks"
+)
+mlflow.set_tracking_uri("databricks")
+mlflow.set_registry_uri("databricks")
+# ---------------------------------------------------------------------------
+
+# Use the current user's workspace folder for the experiment (reliable on serverless).
+username = spark.sql("SELECT current_user()").collect()[0][0]
+experiment_path = f"/Users/{username}/exam-grader-grading-runs"
+experiment = mlflow.set_experiment(experiment_path)
 print("Experiment:", experiment.name)
 
 # COMMAND ----------
@@ -90,7 +104,7 @@ with mlflow.start_run(run_name="batch-grading-run") as run:
 # COMMAND ----------
 
 # Query past runs (like Marvel's search_runs) to compare over time.
-runs = mlflow.search_runs(experiment_names=["/Shared/exam-grader-grading-runs"])
+runs = mlflow.search_runs(experiment_names=[experiment_path])
 display(runs[["run_id", "metrics.graded_this_run", "metrics.avg_score_fraction",
               "metrics.appealed_count"]] if len(runs) else runs)
 
