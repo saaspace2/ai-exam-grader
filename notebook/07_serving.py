@@ -131,8 +131,23 @@ print("log_model kwargs:", list(kwargs.keys()))
 with mlflow.start_run(run_name=f"grader-wrapper-{datetime.now().strftime('%Y-%m-%d')}"):
     model_info = mlflow.pyfunc.log_model(**kwargs)
 
-# register from the logged model uri
-registered = mlflow.register_model(model_uri=model_info.model_uri, name=MODEL_NAME)
+# register from the logged model uri.
+# SERVERLESS-OPTIMIZED: use env_pack so MLflow packages + stages the model
+# artifacts and the serverless environment properly for serving. This is the
+# official fix for serverless deployments and avoids the managed-storage
+# artifact-upload AccessDenied seen with a plain register_model.
+try:
+    from mlflow.utils.env_pack import EnvPackConfig
+    registered = mlflow.register_model(
+        model_info.model_uri, MODEL_NAME,
+        env_pack=EnvPackConfig(name="databricks_model_serving"),
+    )
+    print("Registered with env_pack (serverless-optimized).")
+except Exception as e:
+    # Fallback: plain register (older MLflow without env_pack).
+    print("env_pack not available, using plain register_model:", e)
+    registered = mlflow.register_model(model_uri=model_info.model_uri, name=MODEL_NAME)
+
 client = MlflowClient()
 client.set_registered_model_alias(name=MODEL_NAME, alias="latest-model",
                                   version=registered.version)
