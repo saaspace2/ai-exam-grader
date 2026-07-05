@@ -130,8 +130,8 @@ ORDER BY day
 # MAGIC ## PAID/monitor: Lakehouse Quality Monitor
 # MAGIC With model_monitoring built, a Databricks Quality Monitor can sit on top
 # MAGIC (drift dashboards) exactly as in Marvel. That step uses
-<<<<<<< HEAD
+
 # MAGIC workspace.quality_monitors.create(...) on {base}.model_monitoring.
-=======
+
 # MAGIC workspace.quality_monitors.create(...) on {base}.model_monitoring.
->>>>>>> c5d6df5cac8daf17049c21457692d0b292813814
+
