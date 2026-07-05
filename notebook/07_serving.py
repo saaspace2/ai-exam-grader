@@ -8,7 +8,6 @@
 # an explicit conda_env avoids the auto-generated python_env.yaml that fails to
 # upload on Free Edition.
 # =============================================================================
-
 # COMMAND ----------
 
 # MAGIC %pip install -e ..
