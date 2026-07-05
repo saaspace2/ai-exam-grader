@@ -99,19 +99,36 @@ example = pd.DataFrame([{
 sample_output = GraderModel().predict(None, example)
 signature = infer_signature(example, sample_output)
 
-log_kwargs = dict(
-    artifact_path="grader_model",
+base_kwargs = dict(
     python_model=GraderModel(),
     registered_model_name=MODEL_NAME,
     input_example=example,
     signature=signature,
 )
-# Pass the wheel as code_paths if we built one (this is the key Marvel difference).
-if wheel_path:
-    log_kwargs["code_paths"] = [wheel_path]
 
+# The wheel param name changed across MLflow versions:
+#   older: code_paths=[...]   newer (3.x): code_path=[...]
+# And the model path arg changed: older 'artifact_path' -> newer 'name'.
+# We try combinations until one is accepted, so it works on any version.
+import inspect
+sig_params = set(inspect.signature(mlflow.pyfunc.log_model).parameters.keys())
+
+kwargs = dict(base_kwargs)
+# model path argument
+if "name" in sig_params:
+    kwargs["name"] = "grader_model"
+else:
+    kwargs["artifact_path"] = "grader_model"
+# wheel/code argument
+if wheel_path:
+    if "code_paths" in sig_params:
+        kwargs["code_paths"] = [wheel_path]
+    elif "code_path" in sig_params:
+        kwargs["code_path"] = [wheel_path]
+
+print("Using log_model kwargs:", list(kwargs.keys()))
 with mlflow.start_run(run_name="register-grader-model"):
-    mlflow.pyfunc.log_model(**log_kwargs)
+    mlflow.pyfunc.log_model(**kwargs)
 print("Model logged + registered:", MODEL_NAME)
 
 # COMMAND ----------
