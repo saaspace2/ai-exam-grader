@@ -6,10 +6,10 @@
 # Key lessons baked in:
 #  - env_pack IS required so the grader package is bundled for serving. Without
 #    it the served model raises ModuleNotFoundError: No module named 'grader'.
-#  - The earlier env_pack pip FAILURE was caused by putting the wheel
-#    ('code/<wheel>') into the pip deps. Fix: pass the wheel ONLY via code_paths,
-#    and keep pip deps to real PyPI packages. Then env_pack packages the env
-#    without trying to pip-install a local wheel path.
+#  - The wheel MUST be referenced as code/<wheel> in conda_env (exactly like
+#    07_serving.py, which produced the working version). This is what makes the
+#    SERVING container install the grader package. Omitting it registers fine
+#    but crashes at serving with ModuleNotFoundError: No module named 'grader'.
 # =============================================================================
 
 # COMMAND ----------
@@ -90,12 +90,18 @@ example = pd.DataFrame([{
 signature = infer_signature(example,
     [{"marks_awarded": 2.0, "max_marks": 2.0, "justification": "..."}])
 
-# IMPORTANT: pip deps are REAL PyPI packages only. The grader package is shipped
-# via code_paths (the wheel), NOT via pip - so env_pack does not try to
-# pip-install a local wheel path (which is what failed before).
-conda_env = _mlflow_conda_env(
-    additional_pip_deps=["pydantic>=2", "requests", "python-dotenv"]
-)
+# CRITICAL: reference the wheel as code/<wheel> in conda_env (Marvel's trick,
+# exactly what 07_serving.py does to make the working version). This is what
+# tells the SERVING container to install the grader wheel, so the served model
+# can import grader. Without this line, serving crashes with
+# ModuleNotFoundError: No module named 'grader' (exitCode=1), even though the
+# model registers fine.
+additional_pip_deps = []
+if wheel_path:
+    whl_name = wheel_path.split("/")[-1]
+    additional_pip_deps.append(f"code/{whl_name}")
+additional_pip_deps += ["pydantic>=2", "requests", "python-dotenv"]
+conda_env = _mlflow_conda_env(additional_pip_deps=additional_pip_deps)
 
 import inspect
 sig_params = set(inspect.signature(mlflow.pyfunc.log_model).parameters.keys())
