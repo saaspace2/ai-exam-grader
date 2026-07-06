@@ -45,11 +45,12 @@ class DatabricksGrader(AIGrader):
             "id": "A", "question_id": "Q",
             "student_id": "web", "answer_text": answer_text,
         }
+        # The endpoint expects the MLflow 'dataframe_split' format.
         payload = {
-            "dataframe_records": [{
-                "question_json": json.dumps(question),
-                "answer_json": json.dumps(answer),
-            }]
+            "dataframe_split": {
+                "columns": ["question_json", "answer_json"],
+                "data": [[json.dumps(question), json.dumps(answer)]],
+            }
         }
 
         try:

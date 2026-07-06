@@ -1,7 +1,7 @@
-# CI - runs on every pull request to main. The gatekeeper: only tested code
-# merges. Runs OFFLINE tests (no live endpoint / cluster needed) - fast and safe
-# on every PR. Endpoint tests (smoke/serving/fuzz/etc.) run later in CD, once a
-# real endpoint is deployed. (Structure mirrors the Marvel CI pipeline.)
+# CI - runs the test suite on every PULL REQUEST to main (the gatekeeper).
+# Only tested code can be merged. Offline tests only (endpoint tests skip
+# without ENDPOINT_URL/DBR_TOKEN), so it is fast and needs no secrets.
+# (CD runs tests again + deploys on push to main - see cd.yml.)
 name: CI
 
 on:
@@ -16,7 +16,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.head_ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -28,15 +27,47 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[test]"
 
-      # ------------------------------------------------------------------
-      # OFFLINE tests only - no live endpoint, no Databricks cluster needed.
-      # Safe and fast on every pull request. (The forced-mock conftest makes
-      # these deterministic - no real API calls.)
-      # ------------------------------------------------------------------
-      - name: Unit tests (smallest pieces of code, in isolation)
-        run: |
-          pytest tests/unit/ -v
+      # ---- Part One: standard tests ----
+      - name: Unit tests
+        run: pytest tests/unit/ -v
 
-      - name: Full offline suite (catch anything else)
-        run: |
-          pytest tests/ -v
+      - name: Data quality tests
+        run: pytest tests/data/ -v
+
+      - name: Model registry tests
+        run: pytest tests/registry/ -v
+
+      - name: Integration tests
+        run: pytest tests/integration/ -v
+
+      - name: Regression tests
+        run: pytest tests/regression/ -v
+
+      # ---- Part Two: advanced tests (offline ones) ----
+      - name: Property-based tests
+        run: pytest tests/property_based/ -v
+
+      - name: Snapshot tests
+        run: pytest tests/snapshot/ -v
+
+      - name: Mutation-resistance tests
+        run: pytest tests/mutation/ -v
+
+      - name: Shadow tests
+        run: pytest tests/shadow/ -v
+
+      - name: Canary tests
+        run: pytest tests/canary/ -v
+
+      - name: Chaos tests
+        run: pytest tests/chaos/ -v
+
+      - name: A/B tests
+        run: pytest tests/ab/ -v
+
+      - name: Monitoring tests
+        run: pytest tests/monitoring/ -v
+
+      # ---- Full offline suite (endpoint tests skip automatically) ----
+      - name: Full offline suite
+        run: pytest tests/ -v

@@ -107,10 +107,13 @@ class MockEmbedder(Embedder):
         self.dims = dims
 
     def embed(self, text: str) -> list[float]:
+        import hashlib
         vec = [0.0] * self.dims
         for word in text.lower().split():
-            # hash each word into a bucket and add 1 there
-            bucket = hash(word) % self.dims
+            # STABLE hash into a bucket (Python's built-in hash() is randomized
+            # per session, which made this embedder - and tests - non-deterministic).
+            digest = hashlib.md5(word.encode()).hexdigest()
+            bucket = int(digest, 16) % self.dims
             vec[bucket] += 1.0
         # normalise to unit length so comparisons are fair
         length = math.sqrt(sum(x * x for x in vec)) or 1.0

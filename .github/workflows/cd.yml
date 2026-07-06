@@ -1,6 +1,7 @@
-# CD - runs on push/merge to main. Deploys the bundle to Databricks AND runs
-# the grading job (so a push triggers a real run - not a timed schedule).
-# Adapted from the Marvel CD pipeline for this Free Edition single-target setup.
+# CD - runs on push to main. First RUNS THE TESTS (shows the test step right in
+# this view), then deploys the bundle to Databricks and runs the grading job.
+# Adding the test step here means every deploy shows whether tests passed -
+# exactly like the Marvel CD pipeline.
 name: CD
 
 on:
@@ -23,6 +24,20 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+
+      # ---- Run the tests BEFORE deploying (shows up in this view) ----
+      - name: Run tests
+        run: pytest tests/ -v
+
       - name: Install Databricks CLI
         uses: databricks/setup-cli@main
 
@@ -38,11 +53,9 @@ jobs:
       - name: Deploy Bundle to Databricks (dev)
         env:
           DATABRICKS_BUNDLE_ENV: dev
-        run: |
-          databricks bundle deploy -t dev
+        run: databricks bundle deploy -t dev
 
       - name: Run the grading job on Databricks
         env:
           DATABRICKS_BUNDLE_ENV: dev
-        run: |
-          databricks bundle run grading_job -t dev
+        run: databricks bundle run grading_job -t dev
