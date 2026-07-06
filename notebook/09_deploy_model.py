@@ -1,11 +1,15 @@
 # Databricks notebook source
 # =============================================================================
-# 09_deploy_model.py  -  Register a NEW model version and roll the endpoint.
+# 09_deploy_model.py  -  Register a NEW, SERVABLE model version and roll the
+# endpoint. Runs as the last task in the grading job (CI/CD).
 #
-# Runs as the last task in the grading job. Each run logs a fresh model version
-# (like Marvel's deploy step) and updates the serving endpoint to it, so every
-# job run bumps the endpoint version. Uses the conda_env approach (no env_pack,
-# which fails inside a job's isolated pip step).
+# Key lessons baked in:
+#  - env_pack IS required so the grader package is bundled for serving. Without
+#    it the served model raises ModuleNotFoundError: No module named 'grader'.
+#  - The earlier env_pack pip FAILURE was caused by putting the wheel
+#    ('code/<wheel>') into the pip deps. Fix: pass the wheel ONLY via code_paths,
+#    and keep pip deps to real PyPI packages. Then env_pack packages the env
+#    without trying to pip-install a local wheel path.
 # =============================================================================
 
 # COMMAND ----------
@@ -26,7 +30,7 @@ if _src not in sys.path:
 
 # COMMAND ----------
 
-# Build the wheel (for code_paths).
+# Build the wheel so the grader package can be shipped WITH the model (code_paths).
 subprocess.run([sys.executable, "-m", "pip", "install", "build", "--quiet"],
                capture_output=True, text=True)
 subprocess.run([sys.executable, "-m", "build", "--wheel", _root],
@@ -76,7 +80,7 @@ class GraderModel(mlflow.pyfunc.PythonModel):
 
 # COMMAND ----------
 
-# 1. Log the model with an explicit conda_env (avoids python_env.yaml upload issue).
+# 1. Log the model.
 example = pd.DataFrame([{
     "question_json": json.dumps({"id": "Q1", "type": "mcq",
         "text": "Capital of France?", "correct_answer": "Paris", "max_marks": 2}),
@@ -86,7 +90,9 @@ example = pd.DataFrame([{
 signature = infer_signature(example,
     [{"marks_awarded": 2.0, "max_marks": 2.0, "justification": "..."}])
 
-# Only real PyPI deps (NOT the wheel - code_paths handles the code).
+# IMPORTANT: pip deps are REAL PyPI packages only. The grader package is shipped
+# via code_paths (the wheel), NOT via pip - so env_pack does not try to
+# pip-install a local wheel path (which is what failed before).
 conda_env = _mlflow_conda_env(
     additional_pip_deps=["pydantic>=2", "requests", "python-dotenv"]
 )
@@ -101,12 +107,18 @@ if wheel_path:
 with mlflow.start_run(run_name="job-redeploy"):
     model_info = mlflow.pyfunc.log_model(**kwargs)
 
-# 2. Register a NEW version - plain register (NO env_pack; that pip step fails in jobs).
-registered = mlflow.register_model(model_info.model_uri, MODEL_NAME)
+# 2. Register with env_pack so the model + its environment (incl. the grader
+#    wheel from code_paths) are STAGED for serverless serving. This is what
+#    prevents ModuleNotFoundError: No module named 'grader' at serving time.
+from mlflow.utils.env_pack import EnvPackConfig
+registered = mlflow.register_model(
+    model_info.model_uri, MODEL_NAME,
+    env_pack=EnvPackConfig(name="databricks_model_serving"),
+)
 from mlflow.tracking import MlflowClient
 client = MlflowClient(registry_uri="databricks-uc")
 client.set_registered_model_alias(MODEL_NAME, "latest-model", registered.version)
-print(f"New model version: {registered.version}")
+print(f"New SERVABLE model version: {registered.version}")
 
 # COMMAND ----------
 
