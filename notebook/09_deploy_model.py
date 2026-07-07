@@ -195,7 +195,6 @@ except Exception as e:
     print("Not ready yet (wait for READY, then retry):", e)
 
     print("Not ready yet (wait for READY, then retry):", e)
-<<<<<<< HEAD
 
-=======
->>>>>>> cf48a9eabde37bf7225ff326f5717cd2b05699c0
+
+
