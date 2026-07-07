@@ -207,8 +207,21 @@
       const form = new FormData();
       for (const k in (extra||{})) form.append(k, extra[k]);
       form.append("file", fileInput.files[0]);
-      const res = await fetch(API + endpoint, { method: "POST", body: form });
-      return { ok: res.ok, status: res.status, data: await res.json() };
+      try {
+        const res = await fetch(API + endpoint, { method: "POST", body: form });
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          // Server returned plain text/HTML (e.g. a raw 500 crash) instead of JSON.
+          const text = await res.text().catch(() => "");
+          data = { detail: text || `Server returned status ${res.status} with no readable message.` };
+        }
+        return { ok: res.ok, status: res.status, data };
+      } catch (networkErr) {
+        // fetch() itself failed - network down, CORS, Render service asleep, etc.
+        return { ok: false, status: 0, data: { detail: "Network error: " + networkErr.message } };
+      }
     }
 
     async function uploadPaper() {
