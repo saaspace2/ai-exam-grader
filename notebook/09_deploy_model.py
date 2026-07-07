@@ -191,8 +191,7 @@ try:
     )
     print("Endpoint response:", response)
 except Exception as e:
-<<<<<<< HEAD
+
     print("Not ready yet (wait for READY, then retry):", e)
-=======
+
     print("Not ready yet (wait for READY, then retry):", e)
->>>>>>> 5f7b28dbcab8a74d45917e801bbd7a7db81cc72f
