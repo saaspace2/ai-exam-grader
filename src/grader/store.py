@@ -14,10 +14,13 @@ The audit table is protected in code: this module offers NO update or delete
 for audit entries - only append and read.
 """
 
+import csv
 import json
+import os
 import sqlite3
 from pathlib import Path
 
+from grader.config import settings
 from grader.models import (
     Actor,
     AuditEntry,
@@ -25,6 +28,14 @@ from grader.models import (
     Question,
     StudentAnswer,
 )
+
+# Column order for the auto-saved CSV (kept separate from the DB schema so
+# the CSV stays a stable, human-friendly export).
+_CSV_COLUMNS = [
+    "id", "created_at", "student_id", "question_id",
+    "answer_read", "marks_awarded", "max_marks",
+    "grading_method", "model_used", "image_path", "image_url",
+]
 
 
 class Store:
@@ -246,7 +257,12 @@ class Store:
                         student_id: str, question_id: str, image_path: str | None,
                         answer_read: str, marks_awarded: float, max_marks: float,
                         grading_method: str, model_used: str) -> None:
-        """Record one prediction in the dataset (image + read + grade + model)."""
+        """Record one prediction in the dataset (image + read + grade + model).
+
+        Also appends the same row to a running CSV file on disk (see
+        settings.CSV_EXPORT_PATH), so the dataset survives as a plain file
+        you can open in Excel/Sheets even without querying the database.
+        """
         self.conn.execute(
             """INSERT OR REPLACE INTO predictions
                (id, created_at, student_id, question_id, image_path, answer_read,
@@ -256,6 +272,45 @@ class Store:
              answer_read, marks_awarded, max_marks, grading_method, model_used),
         )
         self.conn.commit()
+        self._append_prediction_csv(
+            prediction_id=prediction_id, created_at=created_at,
+            student_id=student_id, question_id=question_id,
+            image_path=image_path, answer_read=answer_read,
+            marks_awarded=marks_awarded, max_marks=max_marks,
+            grading_method=grading_method, model_used=model_used,
+        )
+
+    def _append_prediction_csv(self, *, prediction_id, created_at, student_id,
+                               question_id, image_path, answer_read,
+                               marks_awarded, max_marks, grading_method,
+                               model_used) -> None:
+        """Append one row to the auto-saved CSV, writing the header first if
+        the file doesn't exist yet. Never raises - a CSV write failure should
+        not break grading."""
+        try:
+            csv_path = settings.CSV_EXPORT_PATH
+            parent = os.path.dirname(csv_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            file_exists = os.path.isfile(csv_path) and os.path.getsize(csv_path) > 0
+            # image_url is a clickable path served by the API (see /uploads
+            # static mount in api.py), not the raw local disk path.
+            image_url = f"/uploads/{os.path.basename(image_path)}" if image_path else ""
+            row = {
+                "id": prediction_id, "created_at": created_at,
+                "student_id": student_id, "question_id": question_id,
+                "answer_read": answer_read, "marks_awarded": marks_awarded,
+                "max_marks": max_marks, "grading_method": grading_method,
+                "model_used": model_used, "image_path": image_path or "",
+                "image_url": image_url,
+            }
+            with open(csv_path, "a", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=_CSV_COLUMNS)
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow(row)
+        except OSError:
+            pass
 
     def list_predictions(self) -> list[dict]:
         """Return every prediction row as a dict (the dataset)."""

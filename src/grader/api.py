@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pathlib import Path as _Path
 
@@ -49,6 +50,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )
+
+# Serve uploaded images back over HTTP, so the CSV's "image_url" column is a
+# real clickable link (e.g. /uploads/<file>.png) instead of just a local
+# server path that only makes sense on disk.
+import os as _os
+_os.makedirs(settings.UPLOADS_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="uploads")
 
 
 @app.get("/")
@@ -382,6 +390,18 @@ def export_dataset(format: str = "json"):
         )
     return {"count": len(rows), "predictions": rows}
 
+
+@app.get("/dataset/csv")
+def download_csv():
+    """Download the auto-saved CSV file directly (one row per graded answer,
+    appended automatically after every /upload/script or /upload/script-full
+    call - see Store.save_prediction). This is the persistent file on disk,
+    not a fresh on-demand export like /dataset/export."""
+    path = settings.CSV_EXPORT_PATH
+    if not _Path(path).exists():
+        raise HTTPException(status_code=404,
+            detail="No predictions have been graded yet - the CSV hasn't been created.")
+    return FileResponse(path, media_type="text/csv", filename="grader_dataset.csv")
 
 
 # ---------------------------------------------------------------------------

@@ -39,6 +39,10 @@ class Settings:
     # Where uploaded answer-script images are saved (maps to a Databricks Volume later).
     UPLOADS_DIR: str = os.environ.get("UPLOADS_DIR", "uploads")
 
+    # Where the auto-saved CSV of every prediction (grade + answer + photo link)
+    # is appended to, one row per graded answer.
+    CSV_EXPORT_PATH: str = os.environ.get("CSV_EXPORT_PATH", "grader_dataset.csv")
+
     # Obvious placeholder values that do NOT count as a real key.
     _PLACEHOLDERS = {"", "paste-your-openrouter-key-here", "your-key-here", "sk-..."}
 
